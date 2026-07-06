@@ -61,7 +61,7 @@ func (r *Repository) GetOriginalURL(ctx context.Context, shortCode string) (stri
 		go func() {
 			ctxInc, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
-			if err := r.cache.AddClick(ctxInc, models.ClickNameSpace+shortCode); err != nil {
+			if err := r.cache.AddClick(ctxInc, shortCode); err != nil {
 				log.Printf("cannot increment click to %s: %s", shortCode, err.Error())
 			} else {
 				log.Println("Added new click!")

@@ -23,12 +23,16 @@ func NewClickWorker(repo ClickRepository, interval time.Duration) *ClickWorker {
 	}
 }
 
-func (c *ClickWorker) Fluch(ctx context.Context) error {
+func (c *ClickWorker) Flush(ctx context.Context) error {
 	data, err := c.repo.FlushClicks(ctx)
 	if err != nil {
 		return err
 	}
-	return c.repo.Batch(ctx, data)
+	if err := c.repo.Batch(ctx, data); err != nil {
+		return err
+	}
+	fmt.Println("service flushed", data)
+	return nil
 }
 
 func (c *ClickWorker) Run(ctx context.Context) {
@@ -40,7 +44,7 @@ func (c *ClickWorker) Run(ctx context.Context) {
 			return
 
 		case <-ticker.C:
-			if err := c.Fluch(ctx); err != nil {
+			if err := c.Flush(ctx); err != nil {
 				fmt.Println("click worker error:", err)
 			}
 		}

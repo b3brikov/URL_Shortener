@@ -8,7 +8,6 @@ import (
 
 var (
 	ErrNotFoundUser = errors.New("user not found")
-	ErrTx           = errors.New("transaction error")
 )
 
 func IsUniqueViolation(err error) bool {
