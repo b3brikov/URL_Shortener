@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
 	"time"
 )
@@ -141,4 +142,33 @@ func (r *Repository) GetUser(ctx context.Context, email string) (*models.User, e
 		return nil, err
 	}
 	return &user, nil
+}
+
+func (r *Repository) Batch(ctx context.Context, flushed map[string]int) error {
+	if len(flushed) == 0 {
+		return nil
+	}
+	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{})
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+	query := `UPDATE urls SET clicks=clicks+$1 WHERE short_code=$2`
+	stmt, err := tx.PrepareContext(ctx, query)
+	if err != nil {
+		return fmt.Errorf("prepare: %w", err)
+	}
+	defer stmt.Close()
+	for code, data := range flushed {
+		_, err = stmt.ExecContext(ctx, data, code)
+		if err != nil {
+			return fmt.Errorf("exec: %w", err)
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (r *Repository) FlushClicks(ctx context.Context) (map[string]int, error) {
+	return r.cache.FlushClicks(ctx)
 }
