@@ -5,8 +5,8 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"log"
+	"log/slog"
 	"time"
 )
 
@@ -21,16 +21,18 @@ type Cache interface {
 }
 
 type Repository struct {
-	db    *sql.DB
-	cache Cache
-	ttl   time.Duration
+	db     *sql.DB
+	cache  Cache
+	ttl    time.Duration
+	logger *slog.Logger
 }
 
-func NewRepository(db *sql.DB, cache Cache, ttl time.Duration) *Repository {
+func NewRepository(db *sql.DB, cache Cache, ttl time.Duration, logger *slog.Logger) *Repository {
 	return &Repository{
-		db:    db,
-		cache: cache,
-		ttl:   ttl,
+		db:     db,
+		cache:  cache,
+		ttl:    ttl,
+		logger: logger,
 	}
 }
 
@@ -58,6 +60,7 @@ func (r *Repository) CreateURL(ctx context.Context, original_url, short_code str
 func (r *Repository) GetOriginalURL(ctx context.Context, shortCode string) (string, error) {
 	resCache, err := r.cache.GetValue(ctx, shortCode)
 	if err == nil {
+		log.Println("Value from cache: ", resCache)
 		go func() {
 			ctxInc, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
@@ -67,7 +70,6 @@ func (r *Repository) GetOriginalURL(ctx context.Context, shortCode string) (stri
 				log.Println("Added new click!")
 			}
 		}()
-		log.Println("Value from cache: ", resCache)
 		return resCache, nil
 	}
 
@@ -83,16 +85,25 @@ func (r *Repository) GetOriginalURL(ctx context.Context, shortCode string) (stri
 
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return "", errors.New("short code not found")
+			return "", ErrCodeNotFound
 		}
 		return "", err
 	}
+	go func() {
+		ctxInc, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		if err := r.cache.AddClick(ctxInc, shortCode); err != nil {
+			log.Printf("cannot increment click to %s: %s", shortCode, err.Error())
+		} else {
+			log.Println("Added new click!")
+		}
+	}()
 
 	go func() {
 		cacheCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		if err := r.cache.Set(cacheCtx, shortCode, res, r.ttl); err != nil {
-			log.Println("cannot add to cache: ", err.Error())
+			r.logger.Error("cannot add value to cache", slog.Any("error", err.Error()))
 		}
 
 	}()
@@ -150,19 +161,19 @@ func (r *Repository) Batch(ctx context.Context, flushed map[string]int) error {
 	}
 	tx, err := r.db.BeginTx(ctx, &sql.TxOptions{})
 	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
+		return err
 	}
 	defer tx.Rollback()
 	query := `UPDATE urls SET clicks=clicks+$1 WHERE short_code=$2`
 	stmt, err := tx.PrepareContext(ctx, query)
 	if err != nil {
-		return fmt.Errorf("prepare: %w", err)
+		return err
 	}
 	defer stmt.Close()
 	for code, data := range flushed {
 		_, err = stmt.ExecContext(ctx, data, code)
 		if err != nil {
-			return fmt.Errorf("exec: %w", err)
+			return err
 		}
 	}
 

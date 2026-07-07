@@ -4,7 +4,9 @@ import (
 	"URLShortener/internal/models"
 	"URLShortener/internal/repository"
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 )
 
 type Repository interface {
@@ -15,13 +17,15 @@ type Repository interface {
 type Service struct {
 	repo              Repository
 	codeLen, maxRetry int
+	Logger            *slog.Logger
 }
 
-func NewService(repo Repository, codeLen, maxRetry int) *Service {
+func NewService(repo Repository, codeLen, maxRetry int, logger *slog.Logger) *Service {
 	return &Service{
 		repo:     repo,
 		codeLen:  codeLen,
 		maxRetry: maxRetry,
+		Logger:   logger,
 	}
 }
 
@@ -39,13 +43,33 @@ func (s *Service) CreateNewCode(ctx context.Context, url string, userID int) (mo
 			continue
 		}
 		if err != nil {
-			return models.URLModel{}, fmt.Errorf("cannot create new code: %w", err)
+			if errors.Is(err, context.Canceled) {
+				return models.URLModel{}, ErrTimeOut
+			}
+			s.Logger.Error("cannot create new code", slog.Any("error", err.Error()))
+			return models.URLModel{}, ErrUnexpectedError
 		}
 		return models.URLModel{Original_url: url, Short_code: shortCode}, nil
 	}
-	return models.URLModel{}, fmt.Errorf("cannot create new code: %w", err)
+	if errors.Is(err, context.Canceled) {
+		return models.URLModel{}, ErrTimeOut
+	}
+	s.Logger.Error("cannot create new code", slog.Any("error", err.Error()))
+
+	return models.URLModel{}, ErrUnexpectedError
 }
 
-func (s *Service) GetOriginalURL(ctx context.Context, url string) (string, error) {
-	return s.repo.GetOriginalURL(ctx, url)
+func (s *Service) GetOriginalURL(ctx context.Context, short_code string) (string, error) {
+	res, err := s.repo.GetOriginalURL(ctx, short_code)
+	if err != nil {
+		if !errors.Is(err, repository.ErrCodeNotFound) {
+			s.Logger.Error("cannot get original url", slog.Any("error", err.Error()), slog.Any("short_code", short_code))
+			return "", fmt.Errorf("get original url: %w", err)
+		}
+		if errors.Is(err, context.Canceled) {
+			return "", ErrTimeOut
+		}
+		return "", err
+	}
+	return res, nil
 }

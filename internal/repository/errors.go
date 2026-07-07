@@ -8,6 +8,7 @@ import (
 
 var (
 	ErrNotFoundUser = errors.New("user not found")
+	ErrCodeNotFound = errors.New("short code not found")
 )
 
 func IsUniqueViolation(err error) bool {

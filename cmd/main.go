@@ -13,6 +13,7 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"os/signal"
 	"syscall"
@@ -22,6 +23,7 @@ import (
 )
 
 func main() {
+	logger := &slog.Logger{}
 	fmt.Println(sql.Drivers())
 	cfg, err := config.Load()
 	if err != nil {
@@ -38,16 +40,16 @@ func main() {
 		log.Println("redis")
 		panic(err)
 	}
-	repo := repository.NewRepository(db, redisCache, 6*time.Minute) //ttl потом брать из конфига
+	repo := repository.NewRepository(db, redisCache, 6*time.Minute, logger) //ttl потом брать из конфига
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
-	clickWorker := worker.NewClickWorker(repo, 5*time.Second)
+	clickWorker := worker.NewClickWorker(repo, 5*time.Second, logger)
 	go func() {
 
 		clickWorker.Run(ctx)
 	}()
-	service := service.NewService(repo, cfg.CodeLength, cfg.MaxRetry)
+	service := service.NewService(repo, cfg.CodeLength, cfg.MaxRetry, logger)
 	tokman := tokenmanager.NewTokenManager(repo, 5*time.Minute, 3*24*time.Hour, []byte("аняня")) //дополнить конфиг
 	h := api.NewHandler(service, tokman)
 	engine := h.InitRoutes()

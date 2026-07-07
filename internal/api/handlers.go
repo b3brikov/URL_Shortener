@@ -2,14 +2,18 @@ package api
 
 import (
 	"URLShortener/internal/models"
+	"URLShortener/internal/service"
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+)
+
+var (
+	InvalidIDType = errors.New("invalid user_id type")
 )
 
 type Service interface {
@@ -34,6 +38,31 @@ func NewHandler(service Service, auth Auth) *Handler {
 	return &Handler{
 		Service:     service,
 		AuthService: auth,
+	}
+}
+
+func Success(c *gin.Context, status int, data any) {
+	c.JSON(status, data)
+}
+
+func Fail(c *gin.Context, status int, message string) {
+	c.JSON(status, gin.H{
+		"error": message,
+	})
+}
+
+func HandleError(c *gin.Context, err error) {
+	switch {
+	case errors.Is(err, service.ErrCodeNotFound):
+		Fail(c, http.StatusNotFound, "not found")
+	case errors.Is(err, service.CannotCreateNewUnique):
+		Fail(c, http.StatusInternalServerError, "cannot create new code")
+	case errors.Is(err, service.ErrUnexpectedError):
+		Fail(c, http.StatusInternalServerError, "unexpected error")
+	case errors.Is(err, service.ErrTimeOut):
+		Fail(c, http.StatusRequestTimeout, "timeout")
+	default:
+		Fail(c, http.StatusInternalServerError, "internal server error")
 	}
 }
 
@@ -62,7 +91,6 @@ func (h *Handler) Auth() gin.HandlerFunc {
 			return
 		}
 		c.Set("user_id", uid)
-		fmt.Println("USER_ID", uid)
 		c.Next()
 	}
 }
@@ -72,12 +100,12 @@ func (h *Handler) Register(c *gin.Context) {
 	err := c.BindJSON(&login)
 
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "request error"})
+		Fail(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	if err := h.AuthService.CreateNewUser(c.Request.Context(), "", login.Email, login.Password); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err})
+		HandleError(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"status": "ok"})
@@ -88,20 +116,17 @@ func (h *Handler) Login(c *gin.Context) {
 	err := c.BindJSON(&login)
 
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "request error"})
+		Fail(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	user, err := h.AuthService.Authorize(c.Request.Context(), login.Email, login.Password)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+		Fail(c, http.StatusUnauthorized, err.Error())
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"status":      "accepted",
-		"credentials": user,
-	})
+	Success(c, http.StatusAccepted, user)
 }
 
 func GetUserID(c *gin.Context) (int, error) {
@@ -122,41 +147,31 @@ func (h *Handler) TestShorten(c *gin.Context) {
 	var url models.OriginalURL
 
 	if err := c.BindJSON(&url); err != nil {
-		c.JSON(400, gin.H{
-			"error": err.Error(),
-		})
+		Fail(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 	code := h.Service.GenerateCode()
-	c.JSON(200, gin.H{
-		"short_url": code,
-	})
+	Success(c, http.StatusCreated, code)
 }
 
 func (h *Handler) CreateNewCode(c *gin.Context) {
 	var url models.OriginalURL
 	userID, err := GetUserID(c)
 	if err != nil {
-		c.JSON(http.StatusNotImplemented, gin.H{
-			"error": err.Error(),
-		})
+		Fail(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 	if err := c.BindJSON(&url); err != nil {
-		c.JSON(500, gin.H{
-			"error": err.Error(),
-		})
+		Fail(c, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	code, err := h.Service.CreateNewCode(c.Request.Context(), url.Original, userID)
 	if err != nil {
-		c.JSON(http.StatusNotImplemented, gin.H{
-			"error": err.Error(),
-		})
+		HandleError(c, err)
 		return
 	}
-	c.JSON(http.StatusCreated, code)
+	Success(c, http.StatusCreated, code)
 }
 
 func (h *Handler) GoToOriginal(c *gin.Context) {
@@ -164,7 +179,7 @@ func (h *Handler) GoToOriginal(c *gin.Context) {
 
 	original, err := h.Service.GetOriginalURL(c.Request.Context(), code)
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		Fail(c, http.StatusNotFound, "not found")
 		return
 	}
 
