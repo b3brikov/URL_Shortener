@@ -179,7 +179,7 @@ func (h *Handler) GoToOriginal(c *gin.Context) {
 
 	original, err := h.Service.GetOriginalURL(c.Request.Context(), code)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "not found")
+		HandleError(c, err)
 		return
 	}
 
