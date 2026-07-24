@@ -14,7 +14,11 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-var EncryptError = errors.New("encrypting password internal error")
+var (
+	EncryptError  = errors.New("encrypting password internal error")
+	EmptyPassword = errors.New("empty password")
+	EmptyEmail    = errors.New("empty email")
+)
 
 type Repository interface {
 	SetToken(ctx context.Context, key, value string, ttl time.Duration) error
@@ -63,6 +67,9 @@ func (t *TokenManager) generateRefreshToken() string {
 }
 
 func (t *TokenManager) CreateNewUser(ctx context.Context, username, email, password string) error {
+	if password == "" {
+		return EmptyPassword
+	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return EncryptError
@@ -73,6 +80,12 @@ func (t *TokenManager) CreateNewUser(ctx context.Context, username, email, passw
 // -------------------------------------------------------------------------------------------------------
 
 func (t *TokenManager) Authorize(ctx context.Context, email, password string) (models.TokenPair, error) {
+	if email == "" {
+		return models.TokenPair{}, EmptyEmail
+	}
+	if password == "" {
+		return models.TokenPair{}, EmptyPassword
+	}
 	user, err := t.repo.GetUser(ctx, email)
 	if err != nil {
 		return models.TokenPair{}, err

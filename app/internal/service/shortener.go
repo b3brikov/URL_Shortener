@@ -46,6 +46,9 @@ func (s *Service) CreateNewCode(ctx context.Context, url string, userID int) (mo
 			if errors.Is(err, context.Canceled) {
 				return models.URLModel{}, ErrTimeOut
 			}
+			if errors.Is(err, repository.ErrNoAffectedRows) {
+				return models.URLModel{}, err
+			}
 			s.Logger.Error("cannot create new code", slog.Any("error", err.Error()))
 			return models.URLModel{}, ErrUnexpectedError
 		}

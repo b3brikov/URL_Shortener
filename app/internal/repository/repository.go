@@ -65,15 +65,15 @@ func (r *Repository) GetOriginalURL(ctx context.Context, shortCode string) (stri
 			ctxInc, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 			defer cancel()
 			if err := r.cache.AddClick(ctxInc, shortCode); err != nil {
-				log.Printf("cannot increment click to %s: %s", shortCode, err.Error())
+				r.logger.Error("cannot increment click to %s: %s", shortCode, err.Error())
 			} else {
-				log.Println("Added new click!")
+				r.logger.Info("Added new click!")
 			}
 		}()
 		return resCache, nil
 	}
 
-	log.Printf("cache miss for %s: %v", shortCode, err)
+	r.logger.Info("cache miss for %s: %v", shortCode, err)
 
 	query := `SELECT original_url FROM urls WHERE short_code=$1`
 
@@ -93,9 +93,9 @@ func (r *Repository) GetOriginalURL(ctx context.Context, shortCode string) (stri
 		ctxInc, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		if err := r.cache.AddClick(ctxInc, shortCode); err != nil {
-			log.Printf("cannot increment click to %s: %s", shortCode, err.Error())
+			r.logger.Error("cannot increment click to %s: %s", shortCode, err.Error())
 		} else {
-			log.Println("Added new click!")
+			r.logger.Info("Added new click!")
 		}
 	}()
 

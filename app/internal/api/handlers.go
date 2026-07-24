@@ -3,6 +3,7 @@ package api
 import (
 	"URLShortener/internal/models"
 	"URLShortener/internal/service"
+	tokenmanager "URLShortener/internal/tokenManager"
 	"context"
 	"errors"
 	"log"
@@ -61,6 +62,8 @@ func HandleError(c *gin.Context, err error) {
 		Fail(c, http.StatusInternalServerError, "unexpected error")
 	case errors.Is(err, service.ErrTimeOut):
 		Fail(c, http.StatusRequestTimeout, "timeout")
+	case errors.Is(err, tokenmanager.EmptyPassword):
+		Fail(c, http.StatusBadRequest, "empty password field")
 	default:
 		Fail(c, http.StatusInternalServerError, "internal server error")
 	}

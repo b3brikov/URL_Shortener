@@ -1,12 +1,25 @@
 services:
   postgres:
     image: postgres:18.4-alpine3.23
-    ports: 
-     - "5432:5432"
+    ports:
+      - "5432:5432"
     env_file:
-      - ".env"
+      - .env
+
   redis:
     image: redis:7-alpine
     ports:
       - "6379:6379"
     command: ["redis-server", "--save", "", "--appendonly", "no"]
+
+  shortener:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    depends_on:
+      - postgres
+      - redis
