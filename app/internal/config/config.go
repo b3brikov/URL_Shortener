@@ -14,6 +14,7 @@ const Version = "dev"
 type Config struct {
 	CodeLength       int           `env:"CODE_LEN" env-default:"8"`
 	MaxRetry         int           `env:"MAX_RETRY" env-default:"5"`
+	PostgresDriver   string        `env:"POSTGRES_DRIVER" env-required:"true"`
 	PostgresUser     string        `env:"POSTGRES_USER" env-required:"true"`
 	PostgresPassword string        `env:"POSTGRES_PASSWORD" env-required:"true"`
 	PostgresHost     string        `env:"POSTGRES_HOST" env-required:"true"`

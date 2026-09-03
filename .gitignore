@@ -31,3 +31,4 @@ go.work.sum
 .vscode/
 
 *.txt
+.continue/prompts/new-prompt.md
