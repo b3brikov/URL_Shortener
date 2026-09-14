@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
-	"log"
 	"strconv"
 	"time"
 
@@ -137,7 +136,7 @@ func (t *Service) validateAccessToken(tokenString string) (*Claims, error) {
 	if claims.UserID == "" {
 		return nil, errors.New("missing user id")
 	}
-	log.Println(claims.UserID)
+
 	return claims, nil
 }
 
