@@ -22,6 +22,12 @@ type User struct {
 	HashPass string `json:"-"`
 }
 
+type NewUser struct {
+	UserName string `json:"username"`
+	Email    string `json:"email"`
+	Password string `json:"password"`
+}
+
 func (u *User) CompareHash(IncomeHash []byte) error {
 	return bcrypt.CompareHashAndPassword([]byte(u.HashPass), IncomeHash)
 }

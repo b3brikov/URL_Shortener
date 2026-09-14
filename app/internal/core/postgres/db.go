@@ -1,23 +1,25 @@
 package postgres
 
 import (
+	"URLShortener/internal/core/models"
 	"context"
 	"database/sql"
+	"errors"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
-type postgresDB struct {
+type PostgresDB struct {
 	db *sql.DB
 }
 
-func NewPostgresDB(db *sql.DB) *postgresDB {
-	return &postgresDB{
+func NewPostgresDB(db *sql.DB) *PostgresDB {
+	return &PostgresDB{
 		db: db,
 	}
 }
 
-func (r *postgresDB) CreateURL(ctx context.Context, original_url, short_code string, userID int) error {
+func (r *PostgresDB) CreateURL(ctx context.Context, original_url, short_code string, userID int) error {
 	query := `INSERT INTO urls (original_url,short_code,user_id) VALUES ($1, $2, $3)`
 
 	_, err := r.db.ExecContext(ctx, query, original_url, short_code, userID)
@@ -25,19 +27,22 @@ func (r *postgresDB) CreateURL(ctx context.Context, original_url, short_code str
 	return err
 }
 
-func (r *postgresDB) GetOriginalURL(ctx context.Context, shortCode string) (string, error) {
+func (r *PostgresDB) GetOriginalURL(ctx context.Context, shortCode string) (string, error) {
 	query := `SELECT original_url FROM urls WHERE short_code=$1`
 	var url string
 
 	err := r.db.QueryRowContext(ctx, query, shortCode).Scan(&url)
 
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrCodeNotFound
+		}
 		return "", err
 	}
 	return url, nil
 }
 
-func (r *postgresDB) Batch(ctx context.Context, flushed map[string]int) error {
+func (r *PostgresDB) Batch(ctx context.Context, flushed map[string]int) error {
 	if len(flushed) == 0 {
 		return nil
 	}
@@ -64,7 +69,7 @@ func (r *postgresDB) Batch(ctx context.Context, flushed map[string]int) error {
 	return nil
 }
 
-func (r *postgresDB) CreateUser(ctx context.Context, username, email, hash string) error {
+func (r *PostgresDB) CreateUser(ctx context.Context, username, email, hash string) error {
 	query := `INSERT INTO users (username,email,password_hash) VALUES ($1,$2,$3)`
 
 	_, err := r.db.ExecContext(ctx, query, username, email, hash)
@@ -73,4 +78,17 @@ func (r *postgresDB) CreateUser(ctx context.Context, username, email, hash strin
 	}
 
 	return nil
+}
+
+func (r *PostgresDB) GetUser(ctx context.Context, email string) (*models.User, error) {
+	query := `SELECT id, username, email, password_hash FROM users WHERE email=$1`
+	var user models.User
+	err := r.db.QueryRowContext(ctx, query, email).Scan(&user.ID, &user.Username, &user.Email, &user.HashPass)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNotFoundUser
+		}
+		return nil, err
+	}
+	return &user, nil
 }

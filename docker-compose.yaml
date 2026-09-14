@@ -28,8 +28,10 @@ services:
     env_file:
       - .env
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
 
   migrations:
     image: migrate/migrate:v4.19.1

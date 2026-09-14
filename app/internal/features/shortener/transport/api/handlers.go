@@ -2,16 +2,35 @@ package shortenerapi
 
 import (
 	"URLShortener/internal/core/models"
+	"URLShortener/internal/core/postgres"
+	utilshttp "URLShortener/internal/core/transport/http/utils"
+	shortener "URLShortener/internal/features/shortener/service"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 )
 
-// мувнуть в core потом
-type contextKey string
+func handleError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, postgres.ErrCodeNotFound):
+		utilshttp.SendError(w, "url not found", http.StatusNotFound)
+	case errors.Is(err, shortener.CannotCreateNewUnique):
+		utilshttp.SendError(w, "internal error", http.StatusInternalServerError)
+	case errors.Is(err, context.DeadlineExceeded):
+		utilshttp.SendError(w, "time out", http.StatusInternalServerError)
+	default:
+		utilshttp.SendError(w, "unexpected error", http.StatusInternalServerError)
+	}
+}
 
-const userIDKey contextKey = "user_id"
+const shortCode = "shortCode"
+
+type Middleware interface {
+	Chain(next http.Handler) http.Handler
+}
 
 type Service interface {
 	CreateNewCode(ctx context.Context, url string, userID int) (models.URLModel, error)
@@ -19,19 +38,26 @@ type Service interface {
 }
 
 type Handlers struct {
-	service Service
-	logger  *slog.Logger
+	middleware Middleware
+	service    Service
+	logger     *slog.Logger
 }
 
-func ShortenerHandlers(service Service, logger *slog.Logger) *Handlers {
+func ShortenerHandlers(service Service, middleware Middleware, logger *slog.Logger) *Handlers {
 	return &Handlers{
-		service: service,
-		logger:  logger,
+		middleware: middleware,
+		service:    service,
+		logger:     logger,
 	}
 }
 
 func (h *Handlers) Register(mux *http.ServeMux) {
-	mux.HandleFunc("POST /api/newcode", h.createCode)
+	submux := http.NewServeMux()
+
+	submux.HandleFunc("POST /api/newcode", h.createCode)
+	submux.HandleFunc("GET /api/{shortCode}", h.redirectCode)
+
+	mux.Handle("/", h.middleware.Chain(submux))
 }
 
 type createCodeInput struct {
@@ -39,7 +65,7 @@ type createCodeInput struct {
 }
 
 func GetUserID(ctx context.Context) (int, bool) {
-	id, ok := ctx.Value(userIDKey).(int)
+	id, ok := ctx.Value(models.UserIDKey).(int)
 	return id, ok
 }
 
@@ -47,13 +73,14 @@ func (h *Handlers) createCode(w http.ResponseWriter, r *http.Request) {
 	var input createCodeInput
 
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		// handleError
+		utilshttp.SendError(w, "bad request", http.StatusBadRequest)
 		return
 	}
 
 	userID, ok := GetUserID(r.Context())
+
 	if !ok {
-		// 500
+		utilshttp.SendError(w, "user id not found", http.StatusInternalServerError)
 		return
 	}
 
@@ -63,7 +90,7 @@ func (h *Handlers) createCode(w http.ResponseWriter, r *http.Request) {
 		userID)
 
 	if err != nil {
-		// handleError
+		handleError(w, err)
 		return
 	}
 
@@ -76,4 +103,21 @@ func (h *Handlers) createCode(w http.ResponseWriter, r *http.Request) {
 			slog.Any("error", err),
 		)
 	}
+}
+
+func (h *Handlers) redirectCode(w http.ResponseWriter, r *http.Request) {
+	code := r.PathValue(shortCode)
+
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+
+	url, err := h.service.GetOriginalURL(ctx, code)
+
+	if err != nil {
+		handleError(w, err)
+		return
+	}
+
+	http.Redirect(w, r, url, http.StatusTemporaryRedirect)
+
 }

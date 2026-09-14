@@ -1,8 +1,10 @@
 package redis
 
 import (
+	"URLShortener/internal/core/cache"
 	"URLShortener/internal/core/models"
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -38,6 +40,9 @@ func (r *RedisStorage) Set(ctx context.Context, key, value string, ttl time.Dura
 
 func (r *RedisStorage) GetValue(ctx context.Context, key string) (string, error) {
 	res := r.Redis.Get(ctx, key)
+	if errors.Is(res.Err(), rds.Nil) {
+		return "", cache.ErrMissingValue
+	}
 	if res.Err() != nil {
 		return "", res.Err()
 	}
