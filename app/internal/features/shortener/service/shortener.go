@@ -18,7 +18,7 @@ type Cache interface {
 }
 
 type URLRepository interface {
-	CreateNewURL(ctx context.Context, original_url, short_code string, userID int) error
+	CreateNewURL(ctx context.Context, original_url, short_code string, userID *int) error
 	OriginalURL(ctx context.Context, short_code string) (string, error)
 }
 
@@ -42,7 +42,7 @@ func (s *Service) generateCode() string {
 	return generate(s.config.CodeLen)
 }
 
-func (s *Service) CreateNewCode(ctx context.Context, url string, userID int) (models.URLModel, error) {
+func (s *Service) CreateNewCode(ctx context.Context, url string, userID *int) (models.URLModel, error) {
 	var err error
 	var shortCode string
 	for i := 0; i < s.config.MaxRetry; i++ {

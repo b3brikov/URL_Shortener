@@ -3,8 +3,8 @@ package main
 import (
 	"URLShortener/di"
 	"context"
-	"log"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -16,17 +16,54 @@ func main() {
 
 	server := app.Server()
 	worker := app.ClickWorker()
+	errCh := make(chan error, 3)
 
 	go worker.Run()
-	go server.Run()
+	go func() { errCh <- server.Run() }()
+	go func() { errCh <- app.RunGRPC() }()
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()
-	<-ctx.Done()
+	select {
+	case <-ctx.Done():
+
+	case err := <-errCh:
+		app.Logger().Error("server failed", "err", err)
+	}
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 40*time.Second)
 	defer cancel()
-	go server.Shutdown(shutdownCtx)
-	if err := worker.Shutdown(shutdownCtx); err != nil {
-		log.Panicln("воркер не доработал все записи")
-	}
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			app.Logger().Error("http shutdown", "err", err)
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		done := make(chan struct{})
+		go func() {
+			app.GrpcServer().GracefulStop()
+			close(done)
+		}()
+		select {
+		case <-done:
+		case <-shutdownCtx.Done():
+			app.GrpcServer().Stop()
+		}
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if err := worker.Shutdown(shutdownCtx); err != nil {
+			app.Logger().Error("worker shutdown", "err", err)
+		}
+	}()
+
+	wg.Wait()
 }

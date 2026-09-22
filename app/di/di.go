@@ -6,15 +6,21 @@ import (
 	"URLShortener/internal/core/db"
 	"URLShortener/internal/core/middleware"
 	"URLShortener/internal/core/postgres"
+	"URLShortener/internal/core/transport/gRPC/interceptor"
+	"URLShortener/internal/core/transport/gRPC/proto"
 	server "URLShortener/internal/core/transport/http"
 	authservice "URLShortener/internal/features/auth/service"
 	authtransport "URLShortener/internal/features/auth/transport"
 	shortenerrepository "URLShortener/internal/features/shortener/repository"
 	shortenerservice "URLShortener/internal/features/shortener/service"
 	shortenertransport "URLShortener/internal/features/shortener/transport/api"
+	grpcapi "URLShortener/internal/features/shortener/transport/grpc_api"
 	"URLShortener/internal/features/shortener/worker"
 	"database/sql"
 	"log/slog"
+	"net"
+
+	"google.golang.org/grpc"
 )
 
 type DI struct {
@@ -31,6 +37,38 @@ type DI struct {
 	shortenerService   *shortenerservice.Service
 	shortenerTransport *shortenertransport.Handlers
 	server             *server.Server
+	grpcShortener      *grpcapi.Server
+	grpcServer         *grpc.Server
+}
+
+func (d *DI) RunGRPC() error {
+	lis, err := net.Listen("tcp", ":"+d.Config().GRPCPort)
+	if err != nil {
+		return err
+	}
+
+	return d.GrpcServer().Serve(lis)
+}
+
+func (d *DI) GrpcServer() *grpc.Server {
+	if d.grpcServer != nil {
+		return d.grpcServer
+	}
+
+	server := grpc.NewServer(grpc.ChainUnaryInterceptor(interceptor.RecoverInterceptor(d.Logger())))
+	proto.RegisterShortenerServer(server, d.GrpcShortener())
+	d.grpcServer = server
+	return d.grpcServer
+}
+
+func (d *DI) GrpcShortener() *grpcapi.Server {
+	if d.grpcShortener != nil {
+		return d.grpcShortener
+	}
+
+	server := grpcapi.NewServer(d.shortenerService)
+	d.grpcShortener = server
+	return d.grpcShortener
 }
 
 func (d *DI) Server() *server.Server {
@@ -116,7 +154,7 @@ func (d *DI) ClickWorker() *worker.ClickWorker {
 	worker := worker.NewClickWorker(d.PostgresDB(), d.Cache(), d.Config().WorkerInterval, d.Logger())
 
 	d.clickWorker = worker
-	return d.ClickWorker()
+	return d.clickWorker
 }
 
 func (d *DI) ShortenerRepo() *shortenerrepository.Repository {

@@ -21,6 +21,18 @@ func NewMiddleware(auth Auth) *Middleware {
 	}
 }
 
+func (m *Middleware) Recover(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if p := recover(); p != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
 func (m *Middleware) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := r.Header.Get("Authorization")
@@ -39,7 +51,7 @@ func (m *Middleware) AuthMiddleware(next http.Handler) http.Handler {
 
 func (m *Middleware) Chain(next http.Handler) http.Handler {
 
-	middlewares := []func(http.Handler) http.Handler{m.AuthMiddleware}
+	middlewares := []func(http.Handler) http.Handler{m.Recover, m.AuthMiddleware}
 
 	for i := len(middlewares) - 1; i >= 0; i-- {
 		next = middlewares[i](next)

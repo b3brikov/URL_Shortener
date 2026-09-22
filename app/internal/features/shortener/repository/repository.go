@@ -5,7 +5,7 @@ import (
 )
 
 type DB interface {
-	CreateURL(ctx context.Context, original_url, short_code string, userID int) error
+	CreateURL(ctx context.Context, original_url, short_code string, userID *int) error
 	GetOriginalURL(ctx context.Context, shortCode string) (string, error)
 }
 
@@ -19,7 +19,7 @@ func NewRepository(db DB) *Repository {
 	}
 }
 
-func (r *Repository) CreateNewURL(ctx context.Context, original_url, short_code string, userID int) error {
+func (r *Repository) CreateNewURL(ctx context.Context, original_url, short_code string, userID *int) error {
 	return r.db.CreateURL(ctx, original_url, short_code, userID)
 }
 

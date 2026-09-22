@@ -33,7 +33,7 @@ type Middleware interface {
 }
 
 type Service interface {
-	CreateNewCode(ctx context.Context, url string, userID int) (models.URLModel, error)
+	CreateNewCode(ctx context.Context, url string, userID *int) (models.URLModel, error)
 	GetOriginalURL(ctx context.Context, shortCode string) (string, error)
 }
 
@@ -87,7 +87,7 @@ func (h *Handlers) createCode(w http.ResponseWriter, r *http.Request) {
 	res, err := h.service.CreateNewCode(
 		r.Context(),
 		input.OriginalURL,
-		userID)
+		&userID)
 
 	if err != nil {
 		handleError(w, err)

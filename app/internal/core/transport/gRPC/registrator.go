@@ -1,9 +1,6 @@
 package registratorgrpc
 
 import (
-	"URLShortener/internal/core/transport/gRPC/auth"
-	"URLShortener/internal/core/transport/gRPC/proto"
-
 	"net"
 
 	"google.golang.org/grpc"
@@ -11,15 +8,6 @@ import (
 
 type GRPCServer struct {
 	Server *grpc.Server
-}
-
-func NewGRPCServer(auth *auth.Handler) *GRPCServer {
-	srv := &grpc.Server{}
-	proto.RegisterShortenerServer(srv, auth)
-
-	return &GRPCServer{
-		Server: srv,
-	}
 }
 
 func (g *GRPCServer) Run() error {

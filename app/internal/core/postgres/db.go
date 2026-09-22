@@ -19,7 +19,7 @@ func NewPostgresDB(db *sql.DB) *PostgresDB {
 	}
 }
 
-func (r *PostgresDB) CreateURL(ctx context.Context, original_url, short_code string, userID int) error {
+func (r *PostgresDB) CreateURL(ctx context.Context, original_url, short_code string, userID *int) error {
 	query := `INSERT INTO urls (original_url,short_code,user_id) VALUES ($1, $2, $3)`
 
 	_, err := r.db.ExecContext(ctx, query, original_url, short_code, userID)

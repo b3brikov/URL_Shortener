@@ -27,6 +27,7 @@ type Config struct {
 	RefreshTokenTTL  time.Duration `env:"REFRESH_TOKEN_TTL"`
 	WorkerInterval   time.Duration `env:"WORKER_INTERVAL"`
 	JWTSecret        string        `env:"JWT_SECRET" env-required:"true"`
+	GRPCPort         string        `env:"GRPC_PORT" env-default:"50051"`
 	Version          string
 }
 
